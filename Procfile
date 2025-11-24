@@ -1,0 +1,1 @@
+web: sh setup.sh && streamlit run GUI_Project1.py
