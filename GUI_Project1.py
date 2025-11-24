@@ -141,7 +141,7 @@ try:
 except Exception as e:
     st.warning(f"Không thể load Banner.png: {e}")
 
-# Tiêu đề chính
+# ===== TIÊU ĐỀ CHÍNH: tô màu + canh giữa =====
 st.markdown(
     """
     <div style="
@@ -152,7 +152,7 @@ st.markdown(
         margin-bottom: 20px;
         box-shadow: 0 6px 18px rgba(148, 163, 233, 0.4);
     ">
-        <h1 style="color:#111827; margin:0; font-size: 1.9rem;">
+        <h1 style="color:#111827; margin:0; font-size: 1.9rem; text-align:center;">
             Dự đoán giá xe máy cũ và phát hiện bất thường
         </h1>
     </div>
@@ -562,17 +562,16 @@ else:
     model_default = None
 
 # =========================
-# 5. MENU CHÍNH (CÓ MỤC CON NGAY DƯỚI PHÁT HIỆN BẤT THƯỜNG)
+# 5. MENU CHÍNH (PHIÊN BẢN MỚI)
 # =========================
 
 menu_items = [
     "1. Mục tiêu dự án",
     "2. Đánh giá & báo cáo",
     "3. Dự đoán giá xe máy cũ",
-    "4. Phát hiện bất thường",
-        "└─ Người đăng tin",
-        "└─ Admin (quản lý bất thường)",
-    "5. Nhóm thực hiện"
+    "4. Phát hiện bất thường - Người đăng tin",
+    "5. Phát hiện bất thường – Admin",
+    "6. Nhóm thực hiện"
 ]
 
 choice = st.sidebar.radio("📂 Danh mục", menu_items)
@@ -617,7 +616,7 @@ if choice.startswith("1."):
     - Nâng cao chất lượng dữ liệu và độ tin cậy của trang.
     - Hỗ trợ đội ngũ kiểm duyệt phát hiện sớm các trường hợp đáng nghi.
 
-    Thông qua việc kết hợp mô hình dự đoán giá và hệ thống cảnh báo tin đăng bất thường, dự án mang lại giá trị thiết thực cho cả người dùng và nền tảng nhằm xây dựng thị trường mua bán xe máy hiệu quả và đáng tin cậy trên chotot.com.
+    Thông qua việc kết hợp mô hình dự đoán giá và hệ thống cảnh báo tin đăng bất thường, dự án mang lại giá trị thiết thực cho cả người dùng và nền tảng nhằm xây dựng thị trường mua bán xe máy cũ hiệu quả và đáng tin cậy trên chotot.com.
 
     </div>
     """, unsafe_allow_html=True)
@@ -760,8 +759,8 @@ elif choice.startswith("3."):
             except Exception as e:
                 st.error(f"Lỗi khi gọi model.predict: {e}")
 
-# ---------- 4.1 PHÁT HIỆN BẤT THƯỜNG - NGƯỜI ĐĂNG TIN ----------
-elif choice.startswith("4.") or "Người đăng tin" in choice:
+# ---------- 4. PHÁT HIỆN BẤT THƯỜNG - NGƯỜI ĐĂNG TIN ----------
+elif choice.startswith("4."):
     pastel_header("🚨", "Phát hiện bất thường - Người đăng tin", "#ede9fe")
 
     if (df_processed is None) or (model_default is None):
@@ -855,7 +854,18 @@ elif choice.startswith("4.") or "Người đăng tin" in choice:
         df_anom = st.session_state.get("df_anom", None)
         threshold = st.session_state.get("anom_threshold", 50)
 
-        if st.button("Phát hiện bất thường"):
+        # Khởi tạo biến lưu kết quả kiểm tra
+        if 'anom_check_result' not in st.session_state:
+            st.session_state['anom_check_result'] = None
+
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            check_clicked = st.button("Bước 1: Kiểm tra bất thường")
+        with col_btn2:
+            post_clicked = st.button("Bước 2: Đăng tin")
+
+        # --- Bước 1: Kiểm tra bất thường ---
+        if check_clicked:
             try:
                 # Gộp vào dữ liệu hiện có để tính score ổn định hơn
                 df_all = pd.concat([df, input_df], ignore_index=True)
@@ -871,7 +881,7 @@ elif choice.startswith("4.") or "Người đăng tin" in choice:
                 # LẤY ĐÚNG TIN MỚI SAU KHI SORT THEO SCORE
                 new_row = df_all_anom[df_all_anom['is_new'] == 1].iloc[0]
                 score_new = new_row['score']
-                is_anom_new = new_row['is_anomaly']
+                is_anom_new = int(new_row['is_anomaly'])
                 gia_pred_new = new_row['gia_predict']
 
                 st.write(
@@ -888,43 +898,75 @@ elif choice.startswith("4.") or "Người đăng tin" in choice:
                     f"(ngưỡng: {thres_used:.2f})"
                 )
 
+                # Lưu kết quả kiểm tra vào session_state
+                st.session_state['anom_check_result'] = {
+                    "is_anomaly": is_anom_new,
+                    "input_df": input_df.to_dict(orient="list"),
+                    "gia": float(new_row['gia']),
+                    "gia_predict": float(new_row['gia_predict']),
+                    "resid": float(new_row['resid']),
+                    "score": float(new_row['score'])
+                }
+
                 if is_anom_new == 1:
                     st.error(
                         f"**Giá xe bất thường**.\n"
                         f"Chênh lệch: {new_row['resid']:.2f} triệu VND so với giá thị trường.\n\n"
-                        f"Chuyển thông tin cho Admin quản lý."
+                        f"Nếu bạn vẫn muốn đăng tin, hệ thống sẽ chuyển thông tin cho Admin quản lý ở bước **Đăng tin**."
                     )
-
-                    # LƯU VÀO FILE EXCEL DÀNH CHO ADMIN
-                    record = {}
-                    record['thoi_gian_dang'] = dt.datetime.now()
-
-                    # Lưu toàn bộ thông tin tin đăng (input_df)
-                    for c in input_df.columns:
-                        record[c] = input_df.iloc[0][c]
-
-                    # Thông tin giá & lý do bất thường
-                    record['gia_thuc_te'] = float(new_row['gia'])
-                    record['gia_du_doan'] = float(new_row['gia_predict'])
-                    record['chenh_lech'] = float(new_row['resid'])
-                    record['ly_do_bat_thuong'] = (
-                        f"Giá tin đăng lệch {new_row['resid']:.2f} triệu VND "
-                        f"so với giá dự đoán"
-                    )
-                    record['anomaly_score'] = float(new_row['score'])
-
-                    append_new_anomaly(record)
                 else:
                     st.success(
-                        "**Giá xe phù hợp**"
+                        "**Giá xe phù hợp**. Bạn có thể bấm **Đăng tin** để hoàn tất."
                     )
 
             except Exception as e:
                 st.error(f"Lỗi khi tính điểm bất thường: {e}")
 
-# ---------- 4.2 PHÁT HIỆN BẤT THƯỜNG - ADMIN ----------
-elif "Admin (quản lý bất thường)" in choice:
-    pastel_header("🚨", "Phát hiện bất thường - Admin (quản lý bất thường)", "#ede9fe")
+        # --- Bước 2: Đăng tin ---
+        if post_clicked:
+            result = st.session_state.get('anom_check_result', None)
+            if result is None:
+                st.warning("Vui lòng bấm **Kiểm tra bất thường** trước khi **Đăng tin**.")
+            else:
+                if result["is_anomaly"] == 0:
+                    # Giá phù hợp -> chỉ báo thành công, không lưu file
+                    st.success("Đăng tin thành công!")
+                else:
+                    # Giá bất thường -> lưu Excel và báo chuyển cho Admin
+                    try:
+                        input_df_dict = result["input_df"]
+                        input_df_post = pd.DataFrame(input_df_dict)
+
+                        record = {}
+                        record['thoi_gian_dang'] = dt.datetime.now()
+
+                        # Lưu toàn bộ thông tin tin đăng
+                        for c in input_df_post.columns:
+                            record[c] = input_df_post.iloc[0][c]
+
+                        record['gia_thuc_te'] = result["gia"]
+                        record['gia_du_doan'] = result["gia_predict"]
+                        record['chenh_lech'] = result["resid"]
+                        record['ly_do_bat_thuong'] = (
+                            f"Giá tin đăng lệch {result['resid']:.2f} triệu VND "
+                            f"so với giá dự đoán"
+                        )
+                        record['anomaly_score'] = result["score"]
+
+                        append_new_anomaly(record)
+
+                        st.success(
+                            "Đăng tin thành công. **Chuyển thông tin cho Admin quản lý.**"
+                        )
+                    except Exception as e:
+                        st.error(f"Lỗi khi lưu thông tin bất thường: {e}")
+
+                # Sau khi đăng tin xong, xoá kết quả kiểm tra để tránh lưu lại lần nữa
+                st.session_state['anom_check_result'] = None
+
+# ---------- 5. PHÁT HIỆN BẤT THƯỜNG - ADMIN ----------
+elif choice.startswith("5."):
+    pastel_header("🚨", "Phát hiện bất thường – Admin", "#ede9fe")
 
     if (df_processed is None) or (model_default is None):
         st.error("Chưa có dữ liệu hoặc mô hình.")
@@ -984,7 +1026,7 @@ elif "Admin (quản lý bất thường)" in choice:
                     ]
                     df_display = df_display.drop(columns=drop_cols_admin, errors='ignore')
 
-                    # SẮP XẾP THỨ TỰ CỘT THEO YÊU CẦU
+                    # SẮP XẾP THỨ TỰ CỘT
                     ordered_cols_admin = [
                         'thuong_hieu', 'dong_xe', 'so_km_da_di', 'loai_xe',
                         'dung_tich_xe', 'xuat_xu', 'tuoi_xe',
@@ -1108,8 +1150,8 @@ elif "Admin (quản lý bất thường)" in choice:
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
 
-# ---------- 5. Thông tin nhóm ----------
-elif choice.startswith("5."):
+# ---------- 6. Thông tin nhóm ----------
+elif choice.startswith("6."):
     pastel_header("👥", "Thành viên", "#dcfce7")
 
     st.markdown("""
